@@ -1,7 +1,4 @@
-venv/
-
-__pycache__
-
+**/venv/
+**/__pycache__
 .vscode/
-
-config.json
+**/config.json

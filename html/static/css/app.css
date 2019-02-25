@@ -1,0 +1,22 @@
+html,
+body {
+    height: 100%;
+    min-height: 500px;
+}
+
+body {
+    display: flex;
+    font-family: 'Titillium Web', Helvetica, "Hiragino Sans GB", "Hiragino Sans GB W3", Source Han Sans CN Regular, WenQuanYi Micro Hei, "Microsoft YaHei", Arial, sans-serif;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    color: #414141;
+    background: url(../images/1.png) 0 0 / 100% 100% no-repeat;
+}
+
+/* #typed {
+    width: 80%;
+    height: 60%;
+    padding-bottom: 30%;
+} */

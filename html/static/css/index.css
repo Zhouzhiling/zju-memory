@@ -1,3 +1,11 @@
+@font-face {
+	font-family: "wenyue-houxiandai";
+	src: url("../../static/font/WenYue-HouXianDaiTi-NC-W4-75.otf");
+	font-weight: normal;
+	font-style: normal;
+}
+
+
 html,
 body {
     height: 100%;
@@ -6,12 +14,12 @@ body {
 
 body {
     display: flex;
-    font-family: 'Titillium Web', Helvetica, "Hiragino Sans GB", "Hiragino Sans GB W3", Source Han Sans CN Regular, WenQuanYi Micro Hei, "Microsoft YaHei", Arial, sans-serif;
+    font-family: "Hiragino Sans GB", "wenyue-houxiandai", "Microsoft YaHei", Arial, sans-serif; 
     flex-direction: column;
     justify-content: center;
     align-items: center;
     margin: 0;
-    background: url(../images/bg.png) 0 0 / 100% 100% no-repeat;
+    background: url(../images/bg.jpg) 0 0 / 100% 100% no-repeat;
 }
 
 
@@ -38,13 +46,18 @@ body {
 
 #logo {
     width: 25%;
-    padding-bottom: 10%;
+    padding-bottom: 30%;
+}
+
+.form {
+    position: absolute;
+    padding-top: 10%;
 }
 
 .form-btn {
     z-index: 1;
     position: absolute;
-    padding-top: 40%;
+    padding-top: 50%;
     text-align: center;
 }
 
@@ -58,22 +71,40 @@ body {
     outline: none;
     font-size: 12px;
     color: #D2332D;
-    background: #F8E2B6 url(../images/启.png) no-repeat scroll 15px 15px / 20px 20px;
+    background: #F8E2B6 url(../images/open.png) no-repeat scroll 15px 15px / 20px 20px;
 }
 
-.infos {
-    position: absolute;
-    padding-top: 60%;
-    font-size: 12px;
-    color: #F8E2B6;
+
+.notice {
+    display: none;
+    z-index: 4;
+    position: fixed;
+    background-color:rgba(248, 248, 248, 0.8) ; 
+    background-size: cover;  
+    text-align: left;
+    padding: 0.3rem 0.3rem;
+}
+
+
+.close {
+    color: red;
+    background-color: transparent;
+    border: 0;
+    border-radius: 10px;
+    line-height: 20px;
     text-align: center;
+    height: 20px;
+    width: 20px;
+    font-size: 16px;
+    padding: 0px;
+    top: 0px;
+    right: 0px;
+    position: absolute;
 }
 
-
-.remind {
-    color: #fff;
+.close::before {
+    content: "\2716";
 }
-
 
 .form-group {
     position: relative;

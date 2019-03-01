@@ -10,23 +10,228 @@
     <meta name="keywords" content="" />
     <meta name="description" content="浙大记忆" />
     <link rel="stylesheet" href="static/css/app.css">
+    <link rel="stylesheet" href="static/css/h5-fullscreen.css">
+    <link href="https://cdn.bootcss.com/animate.css/3.7.0/animate.min.css" rel="stylesheet">
     <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
     <script src="https://cdn.bootcss.com/store.js/1.3.20/store.min.js"></script>
     <script src="https://cdn.bootcss.com/typed.js/2.0.10/typed.min.js"></script>
+    <script src="https://cdn.bootcss.com/echarts/4.2.1-rc1/echarts.min.js"></script>
+    <script src="static/js/macarons.js"></script>
+    <script src="static/js/h5-fullscreen.js"></script>
+    <script src="static/js/app.js"></script>
     <base href="">
     <title>浙大记忆</title>
 </head>
 
 <body>
-    <div id="typed"></div>
-    <script>
-        var options = {
-            strings: ["关于浙大的记忆",],
-            typeSpeed: 100
-        }
+    <div class="fullscreen-page-wrap">
+        <div class="item item2">
+            <div class="content">
+                <span id="typed" style="white-space:pre-wrap;"></span>
+                <script>
+                    let options = {
+                        strings: [
+                            "我的记忆里，会有这样一个园子。\n在这里，\n我走过四年，十六个季节。\n临别的时候，\n想为这个园子作一幅画。\n我的画笔，\n是数字，\n画的名字，\n叫浙大记忆。\n\n上滑开启，领取属于你的浙大记忆。",
+                            "我的记忆里，会有这样一个园子。\n在这里，\n我走过四年，十六个季节。\n临别的时候，\n想为这个园子作一幅画。\n我的画笔，\n是数字，\n画的名字，\n叫浙大记忆。\n\n右上角，可开启背景音乐。",
+                        ],
+                        typeSpeed: 100,
+                        backSpeed: 50
+                    }
+                    let typed = new Typed("#typed", options);
+                </script>
+            </div>
+        </div>
+        <div class="item item3">
+            <div class="card1 animated" data-ani-name="slideInRight" data-ani-duration="1s" data-ani-delay="0s">
+                <h3>
+                    <span class='big' id='ecard-most-count'></span> 次
+                </h3>
+                <h4>
+                    你最常去 “<span id='ecard-most' class='normal'>未知食堂</span>”
+                    <br />
+                    <span id='ecard-most-2' class="normal">未知地点</span> 和 <span id='ecard-most-3'
+                        class='normal'>未知地点</span>
+                    <br />
+                    也是你经常光顾的地方
+                </h4>
+                <h4>
+                    共在 <span id='ecard-total' class='normal'>0</span> 个地点留下了你的消费痕迹
+                </h4>
+            </div>
 
-        var typed = new Typed("#typed", options);
-    </script>
+            <div class="card2 animated" data-ani-name="fadeInLeft" data-ani-duration="1s" data-ani-delay="0.5s">
+                <h4>
+                    最大的一笔消费发生在
+                    <br />
+                    <span id='ecard-biggest' class='normal'>0000-00-00 未知地点</span>
+                    <br />
+                    花费了 <span id='ecard-biggest-count' class='normal'>10</span> 元
+                    <br />
+                    消费最多的一天是 <span id='ecard-day-time' class='normal'>0000-00-00</span>
+                    <br />
+                    花费了 <span id='ecard-day-count' class='normal'>10</span> 元
+                    <br />
+                </h4>
+            </div>
+            <div class="card2 animated" data-ani-name="fadeInLeft" data-ani-duration="1s" data-ani-delay="0.5s">
+                <h4>
+                    水控消费共 <span id='ecard-shower' class='normal'>0</span> 次 食堂消费共 <span id='ecard-normal'
+                        class='normal'>0</span> 次
+                    <br />
+                    银行转账共 <span id='ecard-bank' class="normal">0</span> 次 超市消费共 <span id='ecard-market'
+                        class="normal">0</span> 次
+                    <br />
+                </h4>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="1.0s">
+                <b>“</b>数据来源于近两年校园卡记录<b>”</b>
+            </div>
+        </div>
+        <div class="item item4">
+            <div class="jwbinfosys animated" data-ani-name="fadeInLeft" data-ani-duration="1.0s" data-ani-delay="0.1s">
+                <div class="inner">
+                    共上了 <span id='course-total-count'>0</span> 门课 累积 <span id='course-total-credit'>0</span> 学分
+                    <br />
+                    其中 <span id='course-major-count'>0</span> 门是主修课程
+                </div>
+                <div class="inner">
+                    大学第一门课是(排除军训啦)
+                    <br />
+                    <span id='course-first-teacher'>未知老师</span> 的 <span id='course-first-name'>未知课程</span>
+                    <br />
+                    上课地点是 <span id='course-first-place'>未知地点</span>
+                </div>
+                <div id="course-highest" class="inner">
+                    你最好的三门课
+                </div>
+                <div id='course-teacher' class="inner">
+                    还记得 <span id='course-teacher-name'>未知老师</span> 老师吗？
+                    <br />
+                    一共上了 <span id="course-teacher-count">0</span> 次他(她)的课
+                </div>
+                <div class="inner">
+                    <span id='course-semester-name'>未知学期</span>
+                    <br />
+                    是你最忙碌的一个学期
+                    <br />
+                    一共有 <span id='course-semester-count'>0</span> 门课
+                    <br />
+                    平均每个学期有 <span id='course-semester-avg'>0</span> 门课
+                </div>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="0s">
+                <b>“</b>好好学习，天天向上！<b>”</b></div>
+        </div>
+        <div class="item item7">
+            <div class="cc98 animated" data-ani-name="bounceInDown" data-ani-duration="1s" data-ani-delay="0s">
+                <div class='content'>
+                    拥有 <span id='cc98-count'>0</span> 个cc98账号
+                    <br />
+                    第一个账号在 <span id='cc98-register-time'>0000-00-00</span> 时注册
+                    <br />
+                    登录 <span id='cc98-login-times'>0</span> 次 发帖 <span id='cc98-post-count'>0</span> 次 发言 <span
+                        id='cc98-comment-times'>0</span> 次
+                    <br />
+                    关注 <span id='cc98-follow-count'>0</span> 位用户 拥有 <span id='cc98-fan-count'>0</span> 个粉丝
+                    <br />
+                </div>
+                <img id='cc98-avatar'>
+                <div id='cc98-normal' class='content'>
+                    <span id='cc98-comment1'>简单</span> 如你
+                    <br />
+                    也是一个 <span id='cc98-comment2'>潜水党</span>
+                    <br />
+                </div>
+                <div id='cc98-none' class='content' style="display:none;">
+                    <span>毕业前快去注册一个把~</span>
+                </div>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="0s">
+                <b>“</b>今天你上十大了吗？<b>”</b></div>
+        </div>
+        <div class="item item6">
+            <div class='sport'>
+                <div id='height' class="chart animated" data-ani-name="fadeInUp" data-ani-duration="1s"
+                    data-ani-delay="0.0s">
+                </div>
+                <div id='weight' class="chart animated" data-ani-name="fadeInUp" data-ani-duration="1s"
+                    data-ani-delay="0.5s">
+                </div>
+                <div class="card1 animated" data-ani-name="zoomIn" data-ani-duration="1s" data-ani-delay="1.0s">
+                    <h3>
+                        <span class='big' id='sport-bmi'>20.0</span>
+                    </h3>
+                    <h4>
+                        近两年的bmi不断 <span id='sport-change'>上升</span>
+                    </h4>
+                </div>
+                <div class="card2 animated" data-ani-name="zoomIn" data-ani-duration="1s" data-ani-delay="1.0s">
+                    <h3>
+                        <span class='big' id='sport-score'>20.0</span>
+                    </h3>
+                    <h4>
+                        这是你最高的体测分~
+                    </h4>
+                </div>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="1.5s">
+                <b>“</b> 为祖国健康工作五十年 <b>”</b></div>
+        </div>
+        <div class="item item5">
+            <div class='library'>
+                <ul>
+                    <li class="animated" data-ani-name="fadeInLeft" data-ani-duration="1s" data-ani-delay="0.5s">
+                        <span id="library-first-book-date">0000-00-00</span> 你借了第一本书
+                        <br />
+                        <span id="library-first-book-author">未知作者</span> 的 《<span
+                            id="library-first-book-name">未知书籍</span>》
+                    </li>
+                    <li class="animated" data-ani-name="fadeInRight" data-ani-duration="1s" data-ani-delay="0.5s">
+                        <span id="library-last-book-date">0000-00-00</span> 你借了最后一本书
+                        <br />
+                        <span id="library-last-book-author">未知作者</span> 的 《<span
+                            id="library-last-book-name">未知书籍</span>》
+                    </li>
+                    <li class="animated" data-ani-name="fadeInLeft" data-ani-duration="1s" data-ani-delay="0.5s">
+                        共借了 <span id="library-total-count">0</span> 本书
+                        <br />
+                        出现最多次的作者是 <span id="library-author-name">未知作者</span> 共 <span id="library-author-count">0</span>
+                        次
+                    </li>
+                    <li class="animated" data-ani-name="fadeInRight" data-ani-duration="1s" data-ani-delay="0.5s">
+                        你的图书标签是
+                        <br />
+                        <span id="library-topic">未知标签</span>
+                    </li>
+                    <li class="animated" data-ani-name="fadeInLeft" data-ani-duration="1s" data-ani-delay="0.5s">
+                        你的足迹遍布 <span id="library-place-count">0</span> 个图书馆
+                        <br />
+                        借阅次数最多的是 <span id="library-place-most-name">未知图书馆</span>
+                    </li>
+                    <li id="library-none" class="animated" data-ani-name="fadeInRight" data-ani-duration="1s"
+                        data-ani-delay="0.5s" style="display: none;">
+                        你还没有借阅过图书哦，毕业前快去达成这项成就把！
+                    </li>
+                </ul>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="1s">
+                <b>“</b> 多读书，多看报！ <b>”</b></div>
+        </div>
+        <div class="item item8">
+            <div class='social'>
+                <img src="static/images/qrcode.png"></img>
+                <br />
+                <div class="card animated" data-ani-name="zoomIn" data-ani-duration="1s" data-ani-delay="0.0s">
+                    <h4>
+                        二维码和右上角均可分享哦~
+                    </h4>
+                </div>
+            </div>
+            <div class="say animated" data-ani-name="flipInY" data-ani-duration="1s" data-ani-delay="0.0s">
+                <b>“</b> 谢谢观看！ <b>”</b></div>
+        </div>
+    </div>
+    <div class="overlay"></div>
 </body>
 
 </html>

@@ -1,0 +1,49 @@
+.fullscreen-page .fullscreen-page-wrap { width: 100%; height: 100%; overflow: hidden; position: relative }
+
+.fullscreen-page .item { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; transition: all .7s cubic-bezier(.55, .085, 0, .99); -webkit-transition: all .7s cubic-bezier(.55, .085, 0, .99) }
+
+.fullscreen-page .item:not(:first-child ) { transform: translate3d(0, 100%, 0); -webkit-transform: translate3d(0, 100%, 0) }
+
+.fullscreen-page .no-animation { transition: none; -webkit-transition: none }
+
+.fullscreen-page .hide { display: none }
+
+.fullscreen-page .overlay { display: none; position: absolute; top: 0; left: 0; bottom: 0; right: 0; z-index: 99 }
+
+.fullscreen-page .zindex { z-index: 99 }
+
+.fullscreen-page .arrow { width: 0.333rem; height: 0.333rem; position: absolute; bottom: 0.300em; left: 50%; margin-left: -0.167rem; background-image:url("../../static/images/arrow.png");z-index: 999; -webkit-tap-highlight-color: rgba(255, 255, 255, 0); animation: fadeInUp1 1.5s .2s ease infinite; -webkit-animation: fadeInUp1 1.5s .2s infinite;  background-size:contain; }
+
+.fullscreen-page .parallax.part { transition: all .5s; transition-timing-function: ease-out }
+
+.fullscreen-page .parallax-item { transition-property: background-position, transform; transition-timing-function: ease-out; transition-duration: .5s }
+
+.fullscreen-page .music {
+    position: absolute;
+    right: 0.333rem;
+    top: 0.333rem;
+    width: 0.417rem;
+    height: 0.417rem;
+    background-image: url('../images/music.png');
+    background-size: 0.417rem;
+    z-index: 99;
+}
+.fullscreen-page .music.play {
+    background-image: url('../images/music.png');
+    -webkit-animation: rotate 3.82s linear infinite;
+    animation: rotate1 3.82s linear infinite;
+}
+@keyframes fadeInUp1 {
+    from { opacity: 0; transform: translateY(-0.333rem) ; }
+    to { opacity: 1; transform: translateY(0) ; }
+}
+
+@keyframes rotate1 {
+    0% { -webkit-transform: rotate(0deg) }
+    100% { -webkit-transform: rotate(360deg) }
+}
+
+@-webkit-keyframes rotate1 {
+    0% { -webkit-transform: rotate(0deg) }
+    100% { -webkit-transform: rotate(360deg) }
+}

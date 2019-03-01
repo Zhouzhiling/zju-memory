@@ -1,44 +1,48 @@
 from flask import Flask, request, make_response, jsonify, send_file, session
 from util import zju, pool
-import json
+import threading
 app = Flask(__name__)
-pool = pool()
-
-
-@app.route('/')
-def hello_world():
-    return 'Hello World!'
 
 @app.route('/login', methods=['POST'])
 def login():
     username = request.form['username']
     password = request.form['password']
-    obj = zju(username, password)
-    status = obj.login()
+    sess = zju(username, password)
 
-    res =  {
-        'status': status
-    }
+    res = {}
 
-    if status:
-        res['msg'] = 'login ok'
-        pool.save(username, obj)
-    else:
-        res['msg'] = 'login fail'
+    try:
+        status = sess.login()
+    except Exception as e:
+        res['status'] = False
+        res['msg'] = 'login error'
+        response = make_response(jsonify(res), 200)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        del sess
+        return response
+
+    res['status'] = status
+    res['msg'] = 'login ok' if status else 'login fail'
 
     if not status:
         response = make_response(jsonify(res), 200)
         response.headers['Access-Control-Allow-Origin'] = '*'
+        del sess
         return response
-    
     else:
-        merc = obj.get_ecard()
-        res['merc'] = merc
+        try:
+            sess.go(res)
+        except Exception as e:
+            res['status'] = False
+            res['msg'] = 'fetch error'
+            response = make_response(jsonify(res), 200)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            del sess
+            return response
         response = make_response(jsonify(res), 200)
         response.headers['Access-Control-Allow-Origin'] = '*'
+        del sess
         return response
 
-
-
 if __name__ == '__main__':
-    app.run(port=8000)
+    app.run(host='0.0.0.0', port=8000)

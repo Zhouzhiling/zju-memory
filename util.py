@@ -2,8 +2,9 @@ import requests
 import base64
 import random
 import re
-import pymysql
 import bs4
+import datetime
+import copy
 
 import threading
 
@@ -12,7 +13,6 @@ def pool_lock(func):
         with pool._instance_lock:
             return func(*arg, **kwargs)
     return wrapper
-
 
 class pool():
     _instance_lock = threading.Lock()
@@ -59,44 +59,96 @@ class pool():
 
 class zju():
     def __init__(self, username, password):
-        self.username = username
-        self.password = password
-        self.stuid = self.username
+        self._username = username
+        self._password = password
+        self._stuid = self._username
+        self._grade = int(self._stuid[2])
+        self._semester_num = 9 - self._grade
+        self._timeout = 10
         self._headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate',
             'Accept-Language': 'zh-CN,zh;q=0.9',
             'Connection': 'keep-alive',
             'Cache-Control': 'max-age=0',
+            'Access-Control-Allow-Origin': '*',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.119 Safari/537.36'
         }
         self._session = requests.Session()
         self._cookies = None
 
+    def _get(self, sess, *args, **kwargs):
+        kwargs.update({'timeout': self._timeout})
+        return sess.get(*args, **kwargs)
+
+    def _post(self, sess, *args, **kwargs):
+        kwargs.update({'timeout': self._timeout})
+        return sess.post(*args, **kwargs)
+
     def login(self):
         from rsa import encrypt
-        res = self._session.get(url='https://zjuam.zju.edu.cn/cas/v2/getPubKey', headers=self._headers).json()
+        sess = self._session
+        res = self._get(sess=sess, url='https://zjuam.zju.edu.cn/cas/v2/getPubKey', headers=self._headers).json()
         n, e = res['modulus'], res['exponent']
-        encrypt_password = encrypt(n, e, self.password)
-        res = self._session.get(url='https://zjuam.zju.edu.cn/cas/login?service=https://zuinfo.zju.edu.cn/system/login/login.zf')
+        encrypt_password = encrypt(n, e, self._password)
+        res = self._get(sess=sess, url='https://zjuam.zju.edu.cn/cas/login?service=https://zuinfo.zju.edu.cn/system/login/login.zf')
         execution = re.search('name="execution" value=".*?"', res.text).group(0)[24:-1]
         data = {
-            'username': self.username,
+            'username': self._username,
             'password': encrypt_password,
             'execution': execution,
             '_eventId': 'submit'
         }
-        res = self._session.post(url='https://zjuam.zju.edu.cn/cas/login', data=data)
+        res = self._post(sess=sess, url='https://zjuam.zju.edu.cn/cas/login', data=data)
         status = re.search('class="login-page"', res.text)
-        return not status
 
-    def get_ecard(self):
-        merc = {}
-        res = self._session.get(url='http://mapp.zju.edu.cn/lightapp/lightapp/getCardDetail').json()
-        card = res['data']["query_card"]['card'][0]
+        res = self._get(sess=sess, url='http://mapp.zju.edu.cn/lightapp/lightapp/getCardDetail').json()
+        card = res['data']['query_card']['card'][0]
+        self.phone = card['phone']
+        self.cert = card['cert']
         self.name = card['name']
         self.account = card['account']
+        self.gender = 'boy' if int(self.cert[-2]) % 2 else 'girl'
+        return not status
+
+    def go(self, res):
+        t = []
+        t.append(threading.Thread(target=zju._get_ecard,args=(self, res)))
+        t.append(threading.Thread(target=zju._get_jwbinfosys,args=(self, res)))
+        t.append(threading.Thread(target=zju._get_library,args=(self, res)))
+        t.append(threading.Thread(target=zju._get_cc98,args=(self, res)))
+        t.append(threading.Thread(target=zju._get_sport,args=(self, res)))
+        for i in t:
+            i.start()
+        for i in t:
+            i.join()
+
+    def retry(times):
+        def outer_wrapper(func):
+            def inner_wrapper(self, *arg, **kwargs):
+                for i in range(times):
+                    try:
+                        return func(self, *arg, **kwargs)
+                    except Exception as e:
+                        raise e
+            return inner_wrapper
+        return outer_wrapper
+
+    @retry(2)
+    def _get_ecard(self, response):
+        sess = copy.deepcopy(self._session)
         i = 1
+        ecard_biggest = {
+            'occtime': '',
+            'mercname': '',
+            'tranamt': 0.0
+        }
+        ecard_day = {}
+        ecard_shower = 0
+        ecard_market = 0
+        ecard_normal = 0
+        ecard_bank = 0
+        ecard_merc = {}
         while True:
             params = {
                 'curpage': '{}'.format(i),
@@ -105,25 +157,407 @@ class zju():
                 'queryStart': '20150820',
                 'queryEnd': '20190221'
             }
-            res = self._session.get(url='http://mapp.zju.edu.cn/lightapp/lightapp/getHistoryConsumption', params=params).json()
+            res = self._get(sess=sess, url='http://mapp.zju.edu.cn/lightapp/lightapp/getHistoryConsumption', params=params).json()
             items = res['data']['query_his_total']['total']
             for item in items:
+                # 20190120105050
                 occtime = item['occtime']
                 tranamt = int(item['sign_tranamt']) / 100.0
                 tranname = item['tranname']
                 mercname = item['mercname']
-                if mercname not in merc.keys():
-                    merc[mercname] = 1
+                trancode = item['trancode']
+                if tranamt < 0 and tranamt < ecard_biggest['tranamt']:
+                    ecard_biggest['occtime'] = occtime
+                    ecard_biggest['mercname'] = mercname
+                    ecard_biggest['tranamt'] = tranamt
+                if tranamt < 0:
+                    daytime = occtime[:8]
+                    if daytime not in ecard_day.keys():
+                        ecard_day[daytime] = 0
+                    else:
+                        ecard_day[daytime] += -1 * tranamt
+                if trancode == '15':
+                    if mercname.find('水控') != -1:
+                        ecard_shower += 1
+                    else:
+                        ecard_market += 1
+                if trancode == '16':
+                    ecard_bank += 1
+                if trancode == '94':
+                    ecard_normal += 1
+                if mercname not in ecard_merc.keys():
+                    ecard_merc[mercname] = 1
                 else:
-                    merc[mercname] += 1
+                    ecard_merc[mercname] += 1
             nextpage = int(res['data']['query_his_total']['nextpage'])
             if not nextpage:
                 break
             i += 1
-        res = []
-        for key, value in merc.items():
-            res.append([key, value])
-        print(res)
-        return res
+        
+
+        ecard = {}
+
+        ecard_merc_list = sorted(ecard_merc.items(), key=lambda d:d[1], reverse=True)
+        ecard_most = [{'mercname': i[0], 'count': i[1]} for i in ecard_merc_list[:3]]
+
+        occtime = ecard_biggest['occtime']
+        ecard_biggest['occtime'] = '{}-{}-{} {}:{}:{}'.format(occtime[0:4], occtime[4:6], occtime[6:8], occtime[8:10], occtime[10:12], occtime[12:14])
+        ecard_biggest['tranamt'] = -1 * ecard_biggest['tranamt']
+
+        ecard_day = sorted(ecard_day.items(), key=lambda d:d[1], reverse=True)
+        ecard['day'] = {
+            'time': '{}-{}-{}'.format(ecard_day[0][0][0:4], ecard_day[0][0][4:6], ecard_day[0][0][6:8]),
+            'count': ecard_day[0][1]
+        }
+        ecard['merc'] = ecard_merc_list
+        ecard['shower'] = ecard_shower
+        ecard['bank'] = ecard_bank
+        ecard['normal'] = ecard_normal
+        ecard['market'] = ecard_market
+        ecard['biggest'] = ecard_biggest
+        ecard['most'] = ecard_most
+        ecard['total'] = len(ecard_merc_list)
+        response['ecard'] = ecard
+
+    def _get_jwbinfosys_util(self, res, teacher2num, semester2num, teacher2course, slug):
+        soup = bs4.BeautifulSoup(res.text, 'html.parser')
+        year = soup.find(id='xnd').find(attrs={'selected': "selected"}).text
+        table = soup.find(id='xsgrid')
+        trs = table.findAll('tr')[1:]
+        for tr in trs:
+            tds = tr.findAll('td')
+            course_id, course_name, teacher, semester = tds[0].text, tds[1].text, tds[2].text, tds[3].text
+            teachers = teacher.split('<br/>')
+            for teacher in teachers:
+                if teacher not in teacher2course.keys():
+                    teacher2course[teacher] = [course_name]
+                else:
+                    teacher2course[teacher].append(course_name)
+                
+                if teacher not in teacher2num.keys():
+                    teacher2num[teacher] = 1
+                else:
+                    teacher2num[teacher] += 1
+        # 2015-2016 13s
+        semester2num[slug] = len(trs)
+
+    def _get_jwbinfosys_course(self, sess, semester_num=4):
+        base = 2018
+        teacher2num = {}
+        semester2num = {}
+        teacher2course = {}
+        res = None
+
+        res = self._get(sess=sess, url='http://jwbinfosys.zju.edu.cn/xskbcx.aspx?xh={}'.format(self._stuid))
+        self._get_jwbinfosys_util(res, teacher2num, semester2num, teacher2course, '2018-2019 春夏')
+        viewstate = re.search(
+            'name="__VIEWSTATE" value=".*?"', res.text).group(0)[26:-1]
+        data = {
+            '__VIEWSTATE': viewstate,
+            'xnd': '2018-2019',
+            'xqd': '1|秋、冬'.encode('GBK')
+        }
+        res = self._post(sess=sess, url='http://jwbinfosys.zju.edu.cn/xskbcx.aspx?xh={}'.format(self._stuid), data=data)
+        self._get_jwbinfosys_util(res, teacher2num, semester2num, teacher2course, '2018-2019 秋冬')
+
+        for i in range(1, self._semester_num):
+            viewstate = re.search(
+                'name="__VIEWSTATE" value=".*?"', res.text).group(0)[26:-1]
+            data = {
+                '__VIEWSTATE': viewstate,
+                'xnd': '{}-{}'.format(base-i, base-i+1),
+            }
+            res = self._post(sess=sess, 
+                url='http://jwbinfosys.zju.edu.cn/xskbcx.aspx?xh={}'.format(self._stuid), data=data)
+            self._get_jwbinfosys_util(res, teacher2num, semester2num, teacher2course, '{}-{} 春夏'.format(base-i, base-i+1))
+
+            viewstate = re.search(
+                'name="__VIEWSTATE" value=".*?"', res.text).group(0)[26:-1]
+            data = {
+                '__VIEWSTATE': viewstate,
+                'xnd': '{}-{}'.format(base-i, base-i+1),
+                'xqd': '1|秋、冬'.encode('GBK')
+            }
+            res = self._post(sess=sess, 
+                url='http://jwbinfosys.zju.edu.cn/xskbcx.aspx?xh={}'.format(self._stuid), data=data)
+            self._get_jwbinfosys_util(res, teacher2num, semester2num, teacher2course, '{}-{} 秋冬'.format(base-i, base-i+1))
+
+
+        soup = bs4.BeautifulSoup(res.text, 'html.parser')
+        year = soup.find(id='xnd').find(attrs={'selected': "selected"}).text
+        table = soup.find(id='xsgrid')
+        trs = table.findAll('tr')[1:]
+        first_semester_course = []
+        for tr in trs:
+            tds = tr.findAll('td')
+            course_name, teacher, semester, time, place = tds[1].text, tds[2].text, tds[3].text, tds[4].text, tds[5].text
+            if semester.find('秋') != -1:
+                places = place.split('<br/>')
+                times = time.split('<br/>')
+                time, place = None, None
+                if len(times) >= 2: 
+                    time = sorted(times)[0]
+                    place = places[times.index(time)]
+                else:
+                    place = places[0]
+                    time = times[0]
+                first_semester_course.append((course_name, teacher, place, time))
+
+        first_semester_course = sorted(first_semester_course, key=lambda d:d[-1])
+        first_course = None
+        if first_semester_course[0][0] == '军训':
+            first_course = {
+                'name': first_semester_course[1][0],
+                'teacher': first_semester_course[1][1],
+                'place': first_semester_course[1][2]
+            }
+        else:
+            first_course = {
+                'name': first_semester_course[0][0],
+                'teacher': first_semester_course[0][1],
+                'place': first_semester_course[0][2]
+            }
+        return teacher2num, teacher2course, semester2num, first_course
+
+    @retry(2)
+    def _get_jwbinfosys(self, response):
+        # ajax
+        # get base cookie
+        sess = copy.deepcopy(self._session)
+        jwbinfosys = {}
+        self._get(sess=sess, url='http://jwbinfosys.zju.edu.cn/default2.aspx')
+        res = self._get(sess=sess, url='http://jwbinfosys.zju.edu.cn/xscj.aspx?xh={}'.format(self._stuid))
+        # constant
+        viewstate = re.search(
+            'name="__VIEWSTATE" value=".*?"', res.text).group(0)[26:-1]
+        data = {
+            '__VIEWSTATE': viewstate,
+            'Button2': '在校成绩查询'.encode('GBK')
+        }
+
+        res = self._get(sess=sess, url='http://jwbinfosys.zju.edu.cn/xscj_zg.aspx?xh={}'.format(self._stuid))
+        tds = re.findall('<tr[\S\s]*?</tr>', res.text)[1:]
+        jwbinfosys['major_count'] = len(tds)
+         
+        res = self._post(sess=sess, url='http://jwbinfosys.zju.edu.cn/xscj.aspx?xh={}'.format(self._stuid), data=data)
+        tds = re.findall('<tr[\S\s]*?</tr>', res.text)[1:]
+        
+        course2score = {}
+        total_credit = 0
+        for td in tds:
+            infos = re.findall('<td>[\S\s]*?</td>', td)
+            infos = [i.replace('<td>', '').replace('</td>', '') for i in infos]
+            course_info, course_name, score, credit, gp = infos[:5]
+            if float(gp) >= 1.5:
+                total_credit += float(credit)
+            course_time = course_info[1:12]
+            course_id = course_info[14:22]
+            # score may be '合格'
+            try:
+                if int(score):
+                    course2score[course_name] = int(score)
+            except Exception as e:
+                continue
+        jwbinfosys['total_credit'] = total_credit
+        jwbinfosys['total_count'] = len(tds)
+        course2score = sorted(course2score.items(), key=lambda d:d[1],reverse=True)
+        
+        jwbinfosys['score'] = [{'name': i[0], 'count': i[1]} for i in course2score[:3]]
+
+        teacher2num, teacher2course, semester2num, first_course = self._get_jwbinfosys_course(sess=sess)
+        
+        jwbinfosys['first_course'] = first_course
+        # the teacher with most courses
+        teacher2num = sorted(teacher2num.items(), key=lambda d:d[1],reverse=True)
+        jwbinfosys['teacher'] = {
+            'name': teacher2num[0][0],
+            'count': teacher2num[0][1],
+            'course': teacher2course[teacher2num[0][0]]
+        }
+        semester2num = sorted(semester2num.items(), key=lambda d:d[1],reverse=True)
+        jwbinfosys['semester'] = {
+            'name': semester2num[0][0],
+            'count': semester2num[0][1],
+            'avg': int(sum([i[1] for i in semester2num]) / len(semester2num))
+        }
+        response['jwbinfosys'] = jwbinfosys
+
+    def _get_library_util(self, date):
+        date1 = datetime.datetime.strptime(date, '%Y%m%d')
+        delta = datetime.timedelta(days=-40)
+        date2 = date1 + delta
+        return date2.strftime('%Y-%m-%d')
+
+    @retry(2)
+    def _get_library(self, response):
+        # ISO-8859-1
+        sess = copy.deepcopy(self._session)
+        res = self._get(sess=sess, url='http://webpac.zju.edu.cn/zjusso')
+        res.encoding = 'utf-8'
+        # ?
+        a = re.search('<a href=.*?func=bor-history-loan.*?</a>', res.text).group(0)
+        href = re.search('\(.*?\)', a).group(0)[2:-2]
+        res = self._get(sess=sess, url=href)
+        res.encoding = 'utf-8'
+        soup = bs4.BeautifulSoup(res.text, 'html.parser')
+        table = soup.findAll('table')[-1]
+        trs = table.findAll('tr')[1:]
+
+        library = {}
+        book_info = []
+        author2num, place2num, topic2num = {}, {}, {}
+        try:
+            for tr in trs:
+                tds = tr.findAll('td')
+                author, book_name, date, place = tds[1].text, tds[2].text, tds[4].text, tds[-1].text
+                book_info.append((author, book_name, date))
+
+                if place not in place2num.keys():
+                    place2num[place] = 1
+                else:
+                    place2num[place] += 1
+
+                if author not in author2num.keys():
+                    author2num[author] = 1
+                else:
+                    author2num[author] += 1
+
+                # topic
+                topic_url = tds[2].find('a')['href']
+                res = self._get(sess=sess, url=topic_url)
+                res.encoding = 'utf-8'
+                soup = bs4.BeautifulSoup(res.text, 'html.parser')
+                table = soup.findAll('table')[-2]
+                trs = table.findAll('tr')[1:]
+                for tr in trs:
+                    tds = tr.findAll('td')
+                    for i in range(0, len(tds)):
+                        if (tds[i].text).find('主题') != -1:
+                            for topic in ("".join(tds[i+1].text.strip('\n').split())).split('-'):
+                                if topic not in topic2num.keys():
+                                    topic2num[topic] = 1
+                                else:
+                                    topic2num[topic] += 1
+                            break
+                    
+            first_book = {
+                'author': book_info[-1][0],
+                'name': book_info[-1][1],
+                'date': self._get_library_util(book_info[-1][2])
+            }
+
+            last_book = {
+                'author': book_info[0][0],
+                'name': book_info[0][1],
+                'date': self._get_library_util(book_info[0][2])
+            }
+        except Exception as e:
+            library['total_count'] = 0
+            response['library'] = library
+            return
+        
+        topic2num = sorted(topic2num.items(), key=lambda d:d[1] ,reverse=True)
+        place2num = sorted(place2num.items(), key=lambda d:d[1],reverse=True)
+        author2num = sorted(author2num.items(), key=lambda d:d[1],reverse=True)
+
+        library['total_count'] = len(book_info)
+        library['author'] = {
+            'name': author2num[0][0],
+            'count': author2num[0][1]
+        }
+        library['first_book'] = first_book
+        library['last_book'] = last_book
+        library['place'] = {
+            'count': len(place2num),
+            'most_name': place2num[0][0]
+        }
+        library['topic'] = [i[0] for i in topic2num[:6]]
+        response['library'] = library
+
+    @retry(2)
+    def _get_cc98(self, response):
+        sess = copy.deepcopy(self._session)
+
+        res = self._get(sess=sess, url='https://account.cc98.org/My')
+        soup = bs4.BeautifulSoup(res.text, 'html.parser')
+        tables = soup.findAll(attrs={'class': "table table-sm"})
+        titles = soup.findAll(attrs={'class': "card-title"})
+        cc98 = {}
+        cc98['gender'] = self.gender
+        cc98['count'] = len(tables)
+        cc98['login_times'] = 0
+        cc98['comment_times'] = 0
+        cc98['post_count'] = 0
+        cc98['follow_count'] = 0
+        cc98['fan_count'] = 0
+        cc98['register_time'] = "0000-00-00"
+        for table in tables:
+            trs = table.findAll('tr')
+            infos = []
+            for tr in trs:
+                tds = tr.findAll('td')
+                infos.append(tds[1].text)
+            register_time, last_login, login_times, comment_times = infos[0], infos[1], infos[2], infos[3]
+            cc98['login_times'] += int(login_times)
+            cc98['comment_times'] += int(comment_times)
+        for i in range(0, len(titles)):
+            name = titles[i].text.strip().strip('\n').strip()
+            res = self._get(sess=sess, url="https://api.cc98.org/user/name/{}".format(name)).json()
+            if i == 0:
+                cc98['post_count'] = int(res['postCount'])
+                cc98['follow_count'] = int(res['followCount'])
+                cc98['fan_count'] = int(res['fanCount'])
+                cc98['register_time'] = res['registerTime'][:10]
+            cc98['post_count'] += int(res['postCount'])
+            cc98['follow_count'] += int(res['followCount'])
+            cc98['fan_count'] += int(res['fanCount'])
+        response['cc98'] =  cc98
+
+    @retry(2)
+    def _get_sport(self, response):
+        sess = copy.deepcopy(self._session)
+        data = {
+            'type': 'base_pft',
+            'username': self._username,
+            'password': self._password
+        }
+
+        res = self._post(sess=sess, url='http://www.tyys.zju.edu.cn/ggtypt/dologin', data=data)
+        res = self._get(sess=sess, url='http://www.tyys.zju.edu.cn/pft/myresult')
+
+        soup = bs4.BeautifulSoup(res.text, 'html.parser')
+        table = soup.find(id='dataTables-main')
+        tbody = table.find('tbody')
+        trs = tbody.findAll('tr')
+
+        years, heights, weights, bmis, scores = [], [], [], [], []
+        for tr in trs:
+            tds = tr.findAll('td')
+            tds = [i.text.strip() for i in tds]
+            if tds[-1] == '免测':
+                continue
+            else:
+                score = float(tds[-1]) 
+            year, bmi, height, weight = tds[0], tds[2], tds[3], tds[4]
+            # format: 2018-2019学年
+            year = '{}-{}'.format(year[2:4], year[7:9])
+            years.append(year)
+            heights.append(height)
+            weights.append(weight)
+            scores.append(score)
+            bmis.append(bmi)
+        years = years[::-1]
+        heights = heights[::-1]
+        weights = weights[::-1]
+        bmis = bmis[::-1]
+
+        sport = {}
+        sport['height'] = heights
+        sport['weight'] = weights
+        sport['year'] = years
+        sport['score'] = max(scores)
+        sport['bmi'] = bmis
+        response['sport'] =  sport
+
     
     

@@ -11,8 +11,12 @@
   <meta content="yes" name="apple-touch-fullscreen">
   <title>浙大记忆</title>
   <link rel="stylesheet" href="static/css/index.css">
-  <script src="static/js/index.js"></script>
+  <link rel="stylesheet" href="static/css/overhang.min.css">
   <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://cdn.bootcss.com/jqueryui/1.12.1/jquery-ui.min.js"></script>
+  <script src="static/js/overhang.min.js"></script>
+  <script src="static/js/index.js"></script>
+  <script src="https://cdn.bootcss.com/PreloadJS/1.0.1/preloadjs.min.js"></script>
   <script src="https://cdn.bootcss.com/store.js/1.3.20/store.min.js"></script>
 </head>
 
@@ -20,20 +24,31 @@
   <div id="loading" style="display: none;">
     <img src="static/images/loading.svg">
   </div>
-  <img id="logo" src="static/images/浙大记忆.png">
-  <div class="form-group">
-    <input id="username" type="text" autocomplete="off" required class="form-control">
-    <label class="form-label">账户</label>
-  </div>
-  <div class="form-group">
-    <input id="password" type="password" autocomplete="off" required class="form-control">
-    <label class="form-label">密码</label>
-  </div>
+  <img id="logo" src="static/images/logo.png">
+  <section class='form'>
+    <div class="form-group">
+      <input id="username" type="text" autocomplete="off" required class="form-control">
+      <label class="form-label">账户</label>
+    </div>
+    <div class="form-group">
+      <input id="password" type="password" autocomplete="off" required class="form-control">
+      <label class="form-label">密码</label>
+    </div>
+  </section>
   <div class='form-btn'>
     <button class="form-login" onclick="login();"></button>
   </div>
-  <section class="infos">
-    <span class="remind">不会保留任何隐私信息</span>
+  <section class='notice'>
+    <button id="close-btn" class="close"></button>
+    <span>这是一个个人项目，非官方。</span>
+    <br />
+    <span>旨在通过浙大通行证这个入口，收集各式各样的的浙大内网接口，然后以一种可视化的方式，将这些数据展现出来。但是你不用担心你的隐私可能因此泄露。</span>
+    <br />
+    <span>如果你是小白，你可以理解成这个网页替代你完成了许多浏览操作。然后拼接在一起，形成这一段结果。如果你有所了解，项目后端并没有存储任何个人信息，只做了一个请求转发。</span>
+    <br />
+    <span>所有的图片素材均来自于网络，图片来源依次是[JudyYoung][120周年壁纸][浙大图库*3][CC98/4591810][浙大图库]，后期用PS和美图秀秀处理了一下。前后端代码均开源。</span>
+    <br />
+    <span>初次加载包括请求阶段和预加载阶段，第一个阶段大概5-20秒左右，请耐心等候。按叉叉或空白处关闭该提示，则可继续登录。</span>
   </section>
   </div>
 </body>

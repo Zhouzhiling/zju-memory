@@ -109,16 +109,14 @@ app.initJwbinfosys = () => {
     $("#course-major-count").html(data['major_count']);
     $("#course-total-credit").html(data['total_credit']);
     for (let i in data['score']) {
-        let br = "<br />";
-        let span = $("<span></span>").text(data['score'][i]['name'] + " 成绩是 " + data['score'][i]['count']);
-        $("#course-highest").append(br, span);
+        let span = $("<span></span>").text(data['score'][i]['name'] + " ");
+        $("#course-highest").prepend(span);
     }
     $("#course-teacher-name").html(data['teacher']['name']);
     $("#course-teacher-count").html(data['teacher']['count']);
     for (let i in data['teacher']['course']) {
-        let br = i % 2 ? " " : "<br/>";
-        let span = $("<span></span>").text(data['teacher']['course'][i]);
-        $("#course-teacher").append(br, span);
+        let span = $("<span></span>").text(data['teacher']['course'][i] + " ");
+        $("#course-teacher").append(span);
     }
     $("#course-semester-name").html(data['semester']['name']);
     $("#course-semester-count").html(data['semester']['count']);
@@ -145,6 +143,15 @@ app.initSport = () => {
             show: false,
         },
         calculable: true,
+        legend: {
+            data: ['身高', '体重'],
+            textStyle: {
+                color: '#414141',
+                fontStyle: 'normal',
+                fontWeight: 'normal',
+                fontFamily: "wenyue-houxiandai",
+            }
+        },
         xAxis: [
             {
                 type: 'category',
@@ -156,14 +163,41 @@ app.initSport = () => {
                 type: 'value',
                 show: false,
                 scale: true
+            },
+            {
+                type: 'value',
+                show: false,
+                scale: true
             }
         ],
         series: [
             {
                 name: '身高',
+                type: 'line',
+                clickable: false,
+                data: [],
+                yAxisIndex: 0,
+                markLine: {
+                    data: [
+                        { type: 'average', name: '平均值' }
+                    ]
+                },
+                itemStyle: {
+                    normal: {
+                        label: {
+                            show: true,
+                            position: 'right',
+                        }
+                    }
+
+                }
+            },
+            {
+                name: '体重',
                 type: 'bar',
                 clickable: false,
                 data: [],
+                yAxisIndex: 1,
                 markLine: {
                     data: [
                         { type: 'average', name: '平均值' }
@@ -183,19 +217,12 @@ app.initSport = () => {
     };
 
     data = store.get('data')['sport']
-    let myChart1 = echarts.init(document.getElementById('height'), 'macarons');
+    let myChart = echarts.init(document.getElementById('basic'), 'macarons');
     option['xAxis'][0]['data'] = data['year']
     option['series'][0]['data'] = data['height'];
-    option['title']['text'] = '身高';
-    option['series'][0]['type'] = 'line';
-    option['series'][0]['name'] = '身高';
-    myChart1.setOption(option);
-    let myChart2 = echarts.init(document.getElementById('weight'));
-    option['series'][0]['data'] = data['weight'];
-    option['title']['text'] = '体重';
-    option['series'][0]['type'] = 'bar';
-    option['series'][0]['name'] = '体重';
-    myChart2.setOption(option);
+    option['series'][1]['data'] = data['weight'];
+    myChart.setOption(option);
+
     bmi_data = data['bmi'];
     $("#sport-bmi").html(bmi_data[bmi_data.length - 1]);
     if (bmi_data[bmi_data.length - 1] > bmi_data[bmi_data.length - 2]) {
@@ -204,6 +231,13 @@ app.initSport = () => {
         $("#sport-change").html("↘");
     }
     $("#sport-score").html(data['score']);
+    $("#sport-count").html(store.get('data')['jwbinfosys']['sport_count']);
+    let run = "";
+    for (let i in data['run']) {
+        run += data['run'][i];
+        run += " ";
+    }
+    $("#sport-run").html(run);
 }
 
 
@@ -242,10 +276,14 @@ app.initLibrary = () => {
 app.initCC98 = () => {
     data = store.get('data')['cc98'];
     gender = data['gender'];
-    if (gender === 'boy')
+    if (gender === 'boy') {
         $("#cc98-avatar").attr('src', 'static/images/cc98_boy.png');
-    else
+        $("#sport-run-comment").html('还是当年那个追风少年吗？')
+    }
+    else {
         $("#cc98-avatar").attr('src', 'static/images/cc98_gril.png');
+        $("#sport-run-comment").html('还是当年那个追风少女吗？')
+    }
     $("#cc98-count").html(data['count']);
     $("#cc98-login-times").html(data['login_times']);
     $("#cc98-comment-times").html(data['comment_times']);
@@ -260,9 +298,9 @@ app.initCC98 = () => {
             $("#cc98-comment1").html("简单");
         }
         if (data['comment_times'] > 50) {
-            $("#cc98-comment2").html("灌水怪");
+            $("#cc98-comment2").html("冒泡");
         } else {
-            $("#cc98-comment2").html("潜水党");
+            $("#cc98-comment2").html("潜水");
         }
     } else {
         $("#cc98-normal").hide();
@@ -273,6 +311,7 @@ app.initCC98 = () => {
 $(document).ready(function () {
     if (!app.check())
         return;
+    wxInit();
     app.initEcard();
     app.initJwbinfosys();
     app.initLibrary();

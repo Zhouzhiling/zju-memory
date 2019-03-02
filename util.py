@@ -1,18 +1,130 @@
 import requests
 import base64
 import random
+import string
 import re
 import bs4
+import hashlib
 import datetime
 import copy
+import json
 
 import threading
+
+import queue
+# import gevent
+import multiprocessing
+import logging
+logging.basicConfig(filename='./log', format='%(asctime)s - %(levelname)s - %(threadName)s: %(message)s')
+logging.root.setLevel(level=logging.INFO)
+logger = logging.getLogger()
+
+
+class sign():
+    def __init__(self):
+        self._appid = ''
+        self._secret = ''
+        self._temp_token = './temp_token'
+        self._temp_jsapi = './temp_jsapi'
+        import os
+        if not os.path.exists(self._temp_token):
+            self._temp_init()
+
+    def _temp_init(self):
+        with open(self._temp_token, "w+") as f:
+            f.write(str({'token':'', 'time':'2019-01-01 00:00:00'}))
+        with open(self._temp_jsapi, "w+") as f:
+            f.write(str({'ticket':'', 'time':'2019-01-01 00:00:00'}))
+    
+    def _get_access_token(self):
+        url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential'
+        data = {
+            'appid': self._appid,
+            'secret': self._secret
+        }
+        res = requests.post(url=url, data=data).json()
+        access_token = res['access_token']
+        access_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        access_dict = {
+            'token': access_token,
+            'time': access_time
+        }
+        with open(self._temp_token, "w+") as wf:
+            wf.write(str(access_dict))
+        return access_token
+
+    
+    def _get_jsapi_ticket(self):
+        jsapi_content = None
+        with open(self._temp_jsapi, 'r') as f:
+            jsapi_content = eval(f.read())
+        
+        old_ticket = jsapi_content['ticket']
+        old_time = jsapi_content['time']
+
+        old_time = datetime.datetime.strptime(old_time, "%Y-%m-%d %H:%M:%S")
+        now_time = datetime.datetime.now()
+
+        jsapi_ticket = None
+        if (now_time - old_time).seconds <= 7200:
+            jsapi_ticket = old_ticket
+        else:
+            token_content = None
+            with open(self._temp_token, "r") as f:
+                token_content = eval(f.read())
+            
+            old_token = token_content['token']
+            old_time = token_content['time']
+
+            old_time = datetime.datetime.strptime(old_time, "%Y-%m-%d %H:%M:%S")
+            now_time = datetime.datetime.now()
+            
+            access_token = None
+
+            if (now_time - old_time).seconds <= 7200:
+                access_token = old_token
+            else:
+                access_token = self._get_access_token()
+
+            res = requests.get('https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token={}&type=jsapi'.format(access_token)).json()
+            
+            jsapi_ticket = res['ticket']
+            jsapi_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            jsapi_dict = {
+                'ticket': jsapi_ticket,
+                'time': jsapi_time
+            }
+            with open(self._temp_jsapi, "w+") as wf:
+                wf.write(str(jsapi_dict))
+        return jsapi_ticket
+
+    def _get_random_nonceStr(self):
+        return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(15))
+
+    def _get_time_stamp(self):
+        import time
+        return int(time.time())
+
+    def get_signature(self, url):
+        import time
+        ret = {
+            'nonceStr': self._get_random_nonceStr(),
+            'jsapi_ticket': self._get_jsapi_ticket(),
+            'timestamp': self._get_time_stamp(),
+            'url': url
+        }
+        string = '&'.join(['%s=%s' % (key.lower(), ret[key]) for key in sorted(ret)])
+        ret['signature'] = hashlib.sha1(string.encode('utf-8')).hexdigest()
+        ret['appid'] = self._appid
+        return ret
+
 
 def pool_lock(func):
     def wrapper(*arg, **kwargs):
         with pool._instance_lock:
             return func(*arg, **kwargs)
     return wrapper
+
 
 class pool():
     _instance_lock = threading.Lock()
@@ -118,26 +230,33 @@ class zju():
         t.append(threading.Thread(target=zju._get_library,args=(self, res)))
         t.append(threading.Thread(target=zju._get_cc98,args=(self, res)))
         t.append(threading.Thread(target=zju._get_sport,args=(self, res)))
-        for i in t:
-            i.start()
-        for i in t:
-            i.join()
+        try:
+            for i in t:
+                i.start()
+            for i in t:
+                i.join()
+        except Exception as e:
+            raise e
 
     def retry(times):
         def outer_wrapper(func):
             def inner_wrapper(self, *arg, **kwargs):
                 for i in range(times):
                     try:
-                        return func(self, *arg, **kwargs)
+                        starttime = datetime.datetime.now()
+                        ret = func(self, *arg, **kwargs)
+                        endtime = datetime.datetime.now()
+                        logger.info("func: {} time: {}s username: {}".format(func.__name__, (endtime - starttime).seconds, self._username))
+                        # if no error, just break
+                        break
                     except Exception as e:
                         raise e
             return inner_wrapper
         return outer_wrapper
 
-    @retry(2)
-    def _get_ecard(self, response):
-        sess = copy.deepcopy(self._session)
-        i = 1
+
+    def _get_ecard_part(self, sess, start_page, end_page, q):
+        # from gevent import monkey; monkey.patch_all()
         ecard_biggest = {
             'occtime': '',
             'mercname': '',
@@ -149,13 +268,14 @@ class zju():
         ecard_normal = 0
         ecard_bank = 0
         ecard_merc = {}
-        while True:
+
+        for i in range(start_page, end_page):
             params = {
                 'curpage': '{}'.format(i),
                 'pagesize': '50',
                 'account': '{}'.format(self.account),
                 'queryStart': '20150820',
-                'queryEnd': '20190221'
+                'queryEnd': '20190302'
             }
             res = self._get(sess=sess, url='http://mapp.zju.edu.cn/lightapp/lightapp/getHistoryConsumption', params=params).json()
             items = res['data']['query_his_total']['total']
@@ -189,11 +309,69 @@ class zju():
                     ecard_merc[mercname] = 1
                 else:
                     ecard_merc[mercname] += 1
-            nextpage = int(res['data']['query_his_total']['nextpage'])
-            if not nextpage:
-                break
-            i += 1
+        q.put((ecard_biggest, ecard_day, ecard_shower, ecard_market, ecard_normal, ecard_bank, ecard_merc))
+            
+
+
+    @retry(2)
+    def _get_ecard(self, response):
+        sess = copy.deepcopy(self._session)
+        i = 1
+
+        params = {
+                'curpage': '{}'.format(i),
+                'pagesize': '50',
+                'account': '{}'.format(self.account),
+                'queryStart': '20150820',
+                'queryEnd': '20190221'
+            }
+        res = self._get(sess=sess, url='http://mapp.zju.edu.cn/lightapp/lightapp/getHistoryConsumption', params=params).json()
+        # 1 pages
+        pages = int(int(res['data']['query_his_total']['rowcount']) / int(res['data']['query_his_total']['pagesize']))
         
+        middle = int(pages / 2)
+
+
+        ecard_biggest = {
+            'occtime': '',
+            'mercname': '',
+            'tranamt': 0.0
+        }
+        ecard_day = {}
+        ecard_shower = 0
+        ecard_market = 0
+        ecard_normal = 0
+        ecard_bank = 0
+        ecard_merc = {}
+
+
+        t = []
+        
+        q = queue.Queue()
+        t.append(threading.Thread(target=zju._get_ecard_part,args=(self, sess, 1, int(pages/3), q)))
+        t.append(threading.Thread(target=zju._get_ecard_part,args=(self, sess, int(pages/3), int(pages/3*2), q)))
+        t.append(threading.Thread(target=zju._get_ecard_part,args=(self, sess, int(pages/3*2), pages+2, q)))
+        try:
+            for i in t:
+                i.start()
+            for i in t:
+                i.join()
+        except Exception as e:
+            raise e
+
+        while not q.empty():
+            ecard_biggest_t, ecard_day_t, ecard_shower_t, ecard_market_t, ecard_normal_t, ecard_bank_t, ecard_merc_t =  q.get()
+            ecard_biggest = ecard_biggest_t if ecard_biggest_t['tranamt'] < ecard_biggest['tranamt'] else ecard_biggest
+            ecard_day.update(ecard_day_t)
+            ecard_shower += ecard_shower_t
+            ecard_normal += ecard_normal_t
+            ecard_market += ecard_market_t
+            ecard_bank += ecard_bank_t
+            for key, value in ecard_merc_t.items():
+                if key not in ecard_merc.keys():
+                    ecard_merc[key] = value
+                else:
+                    ecard_merc[key] += value
 
         ecard = {}
 
@@ -344,6 +522,7 @@ class zju():
         
         course2score = {}
         total_credit = 0
+        sport2num = {}
         for td in tds:
             infos = re.findall('<td>[\S\s]*?</td>', td)
             infos = [i.replace('<td>', '').replace('</td>', '') for i in infos]
@@ -352,12 +531,20 @@ class zju():
                 total_credit += float(credit)
             course_time = course_info[1:12]
             course_id = course_info[14:22]
+            if course_id[:3] == '401':
+                index = course_name.find('（')
+                course_type = course_name if index == -1 else course_name[:index]
+                if course_type not in sport2num.keys():
+                    sport2num[course_type] = 1
+                else:
+                    sport2num[course_type] += 1
             # score may be '合格'
             try:
                 if int(score):
                     course2score[course_name] = int(score)
             except Exception as e:
                 continue
+        jwbinfosys['sport_count'] = len(sport2num)
         jwbinfosys['total_credit'] = total_credit
         jwbinfosys['total_count'] = len(tds)
         course2score = sorted(course2score.items(), key=lambda d:d[1],reverse=True)
@@ -388,6 +575,30 @@ class zju():
         date2 = date1 + delta
         return date2.strftime('%Y-%m-%d')
 
+    def _get_library_topic(self, sess, start, end, topic_urls, q):
+        topic2num = {}
+        for i in range(start, end):
+            topic_url = topic_urls[i]
+            res = self._get(sess=sess, url=topic_url)
+            res.encoding = 'utf-8'
+            soup = bs4.BeautifulSoup(res.text, 'html.parser')
+            table = soup.findAll('table')[-2]
+            trs = table.findAll('tr')[1:]
+            for tr in trs:
+                tds = tr.findAll('td')
+                for i in range(0, len(tds)):
+                    if (tds[i].text).find('主题') != -1:
+                        try:
+                            for topic in ("".join(tds[i+1].text.strip('\n').split())).split('-'):
+                                if topic not in topic2num.keys():
+                                    topic2num[topic] = 1
+                                else:
+                                    topic2num[topic] += 1
+                            break
+                        except Exception as e:
+                            break
+        q.put((topic2num))
+
     @retry(2)
     def _get_library(self, response):
         # ISO-8859-1
@@ -405,11 +616,12 @@ class zju():
 
         library = {}
         book_info = []
+        topic_urls = []
         author2num, place2num, topic2num = {}, {}, {}
         try:
             for tr in trs:
                 tds = tr.findAll('td')
-                author, book_name, date, place = tds[1].text, tds[2].text, tds[4].text, tds[-1].text
+                author, book_name, date, place = tds[1].text.strip(',').strip('，'), tds[2].text, tds[4].text, tds[-1].text
                 book_info.append((author, book_name, date))
 
                 if place not in place2num.keys():
@@ -424,21 +636,25 @@ class zju():
 
                 # topic
                 topic_url = tds[2].find('a')['href']
-                res = self._get(sess=sess, url=topic_url)
-                res.encoding = 'utf-8'
-                soup = bs4.BeautifulSoup(res.text, 'html.parser')
-                table = soup.findAll('table')[-2]
-                trs = table.findAll('tr')[1:]
-                for tr in trs:
-                    tds = tr.findAll('td')
-                    for i in range(0, len(tds)):
-                        if (tds[i].text).find('主题') != -1:
-                            for topic in ("".join(tds[i+1].text.strip('\n').split())).split('-'):
-                                if topic not in topic2num.keys():
-                                    topic2num[topic] = 1
-                                else:
-                                    topic2num[topic] += 1
-                            break
+                topic_urls.append(topic_url)
+                # res = self._get(sess=sess, url=topic_url)
+                # res.encoding = 'utf-8'
+                # soup = bs4.BeautifulSoup(res.text, 'html.parser')
+                # table = soup.findAll('table')[-2]
+                # trs = table.findAll('tr')[1:]
+                # for tr in trs:
+                #     tds = tr.findAll('td')
+                #     for i in range(0, len(tds)):
+                #         if (tds[i].text).find('主题') != -1:
+                #             try:
+                #                 for topic in ("".join(tds[i+1].text.strip('\n').split())).split('-'):
+                #                     if topic not in topic2num.keys():
+                #                         topic2num[topic] = 1
+                #                     else:
+                #                         topic2num[topic] += 1
+                #                 break
+                #             except Exception as e:
+                #                 break
                     
             first_book = {
                 'author': book_info[-1][0],
@@ -456,6 +672,32 @@ class zju():
             response['library'] = library
             return
         
+
+        t = []
+        items = len(topic_urls)
+        q = queue.Queue()
+        
+        seeds = 8
+        indexs = [int(items/(seeds/i)) if i else 0 for i in range(0, seeds+1)]
+        for i in range(seeds):
+            t.append(threading.Thread(target=zju._get_library_topic, args=(self, sess, indexs[i], indexs[i+1], topic_urls, q)))
+        try:
+            for i in t:
+                i.start()
+            for i in t:
+                i.join()
+        except Exception as e:
+            raise e
+
+        while not q.empty():
+            topic2num_t =  q.get()
+            for key, value in topic2num_t.items():
+                if key not in topic2num.keys():
+                    topic2num[key] = value
+                else:
+                    topic2num[key] += value
+
+
         topic2num = sorted(topic2num.items(), key=lambda d:d[1] ,reverse=True)
         place2num = sorted(place2num.items(), key=lambda d:d[1],reverse=True)
         author2num = sorted(author2num.items(), key=lambda d:d[1],reverse=True)
@@ -474,6 +716,21 @@ class zju():
         library['topic'] = [i[0] for i in topic2num[:6]]
         response['library'] = library
 
+
+    def _get_cc98_util(self, sess, title, q):
+        post_count = 0
+        follow_count = 0
+        fan_count = 0
+        register_time = "0000-00-00"
+        name = title.text.strip().strip('\n').strip()
+        res = self._get(sess=sess, url="https://api.cc98.org/user/name/{}".format(name)).json()
+        post_count += int(res['postCount'])
+        follow_count += int(res['followCount'])
+        fan_count += int(res['fanCount'])
+        register_time = res['registerTime'][:10]
+        q.put((post_count, follow_count, fan_count, register_time))
+
+
     @retry(2)
     def _get_cc98(self, response):
         sess = copy.deepcopy(self._session)
@@ -490,7 +747,7 @@ class zju():
         cc98['post_count'] = 0
         cc98['follow_count'] = 0
         cc98['fan_count'] = 0
-        cc98['register_time'] = "0000-00-00"
+        cc98['register_time'] = "2020-01-01"
         for table in tables:
             trs = table.findAll('tr')
             infos = []
@@ -500,17 +757,29 @@ class zju():
             register_time, last_login, login_times, comment_times = infos[0], infos[1], infos[2], infos[3]
             cc98['login_times'] += int(login_times)
             cc98['comment_times'] += int(comment_times)
-        for i in range(0, len(titles)):
-            name = titles[i].text.strip().strip('\n').strip()
-            res = self._get(sess=sess, url="https://api.cc98.org/user/name/{}".format(name)).json()
-            if i == 0:
-                cc98['post_count'] = int(res['postCount'])
-                cc98['follow_count'] = int(res['followCount'])
-                cc98['fan_count'] = int(res['fanCount'])
-                cc98['register_time'] = res['registerTime'][:10]
-            cc98['post_count'] += int(res['postCount'])
-            cc98['follow_count'] += int(res['followCount'])
-            cc98['fan_count'] += int(res['fanCount'])
+
+        t = []
+        
+        q = queue.Queue()
+        for title in titles:
+            t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
+            t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
+            t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
+        try:
+            for i in t:
+                i.start()
+            for i in t:
+                i.join()
+        except Exception as e:
+            raise e
+
+        while not q.empty():
+            post_count, follow_count, fan_count, register_time =  q.get()
+            cc98['post_count'] += post_count
+            cc98['follow_count'] += follow_count
+            cc98['fan_count'] += fan_count
+            cc98['register_time'] = register_time if register_time < cc98['register_time'] else cc98['register_time']
+
         response['cc98'] =  cc98
 
     @retry(2)
@@ -530,7 +799,7 @@ class zju():
         tbody = table.find('tbody')
         trs = tbody.findAll('tr')
 
-        years, heights, weights, bmis, scores = [], [], [], [], []
+        years, heights, weights, bmis, scores, runs = [], [], [], [], [], []
         for tr in trs:
             tds = tr.findAll('td')
             tds = [i.text.strip() for i in tds]
@@ -538,26 +807,25 @@ class zju():
                 continue
             else:
                 score = float(tds[-1]) 
-            year, bmi, height, weight = tds[0], tds[2], tds[3], tds[4]
+            year, bmi, height, weight, run = tds[0], tds[2], tds[3], tds[4], tds[9].split('/')[0].replace('.', "'")
             # format: 2018-2019学年
             year = '{}-{}'.format(year[2:4], year[7:9])
             years.append(year)
             heights.append(height)
             weights.append(weight)
             scores.append(score)
+            runs.append(run)
             bmis.append(bmi)
         years = years[::-1]
         heights = heights[::-1]
         weights = weights[::-1]
         bmis = bmis[::-1]
-
+        runs = runs[::-1]
         sport = {}
         sport['height'] = heights
         sport['weight'] = weights
         sport['year'] = years
         sport['score'] = max(scores)
         sport['bmi'] = bmis
+        sport['run'] = runs
         response['sport'] =  sport
-
-    
-    

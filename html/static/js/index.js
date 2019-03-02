@@ -24,6 +24,7 @@ $(document).ready(function () {
     $("#close-btn").bind('click', (event) => {
         $('.notice').hide(1000);
     });
+    wxInit();
 });
 
 
@@ -40,7 +41,7 @@ let login = () => {
         $('#loading').show();
         $.ajax({
             type: "POST",
-            url: "http://localhost:8000/login",
+            url: "",
             data: { username: $("#username").val(), password: $("#password").val() },
             timeout: 30000,
             error: function (XMLHttpRequest, textStatus, errorThrown) {
@@ -60,7 +61,7 @@ let login = () => {
                         { id: "t_1", src: "./static/images/1.jpg" },
                         { id: "t_3", src: "./static/images/3.jpg" },
                         { id: "t_4", src: "./static/images/4.jpg" },
-                        { id: "t_5", src: "./static/images/5.jpg" },
+                        // { id: "t_5", src: "./static/images/5.jpg" },
                         // { id: "t_6", src: "./static/images/6.jpg" },
                         // { id: "t_7", src: "./static/images/7.jpg" },
                     ]);
@@ -80,6 +81,12 @@ let login = () => {
                         $("body").overhang({
                             type: "error",
                             message: "数据拉取不完整",
+                        });
+                    }
+                    if (data['msg'] === 'stuid error') {
+                        $("body").overhang({
+                            type: "error",
+                            message: "学号不在允许范围",
                         });
                     }
 

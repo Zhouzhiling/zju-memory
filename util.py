@@ -763,8 +763,6 @@ class zju():
         q = queue.Queue()
         for title in titles:
             t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
-            t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
-            t.append(threading.Thread(target=zju._get_cc98_util,args=(self, sess, title, q)))
         try:
             for i in t:
                 i.start()

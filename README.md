@@ -2,7 +2,7 @@
 
 浙大记忆，献给zju的毕业礼物。
 
-前端: H5 animate.js H5fullpage echarts wx.js(share)...
+前端: H5 animate.js H5fullpage echarts preload.js wx.js(share)...
 
 后端: Flask uwsgi nginx
 

@@ -801,7 +801,7 @@ class zju():
         for tr in trs:
             tds = tr.findAll('td')
             tds = [i.text.strip() for i in tds]
-            if tds[-1] == '免测':
+            if tds[-1] == '免测' or tds[-1] == '暂无':
                 continue
             else:
                 score = float(tds[-1]) 

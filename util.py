@@ -250,7 +250,7 @@ class zju():
                         # if no error, just break
                         break
                     except Exception as e:
-                        raise e
+                        continue
             return inner_wrapper
         return outer_wrapper
 
